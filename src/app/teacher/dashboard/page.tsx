@@ -9,6 +9,8 @@ import {
   togglePublishLesson,
 } from "@/lib/firestore/lessons";
 import { useAuth } from "@/contexts/AuthContext";
+import { Menu, MenuButton, MenuItems, MenuItem } from "@headlessui/react";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import {
   PlusCircle,
   BookOpen,
@@ -16,10 +18,10 @@ import {
   Edit,
   Trash2,
   Sparkles,
-  CheckCircle2,
   Globe,
   Lock,
-  Layers,
+  ChevronDown,
+  Settings,
 } from "lucide-react";
 
 export default function TeacherDashboard() {
@@ -28,6 +30,24 @@ export default function TeacherDashboard() {
 
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    variant: "danger" | "warning" | "info";
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    variant: "danger",
+    onConfirm: () => {},
+  });
+
+  const closeDialog = () =>
+    setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
 
   const loadLessons = async () => {
     setLoading(true);
@@ -40,25 +60,56 @@ export default function TeacherDashboard() {
     loadLessons();
   }, [authorId]);
 
-  const handleTogglePublish = async (lesson: Lesson) => {
+  const handleTogglePublish = (lesson: Lesson) => {
     const quizCount = lesson.cards.filter((c) => c.type === "quiz").length;
     if (!lesson.isPublished && quizCount === 0) {
-      alert("ไม่สามารถเผยแพร่ได้: บทเรียนต้องมีการ์ดแบบทดสอบ (Quiz) อย่างน้อย 1 ใบ");
+      setConfirmDialog({
+        isOpen: true,
+        title: "ไม่สามารถเผยแพร่ได้",
+        message:
+          "บทเรียนต้องมีการ์ดแบบทดสอบ (Quiz) อย่างน้อย 1 ใบ จึงจะเผยแพร่ได้",
+        variant: "warning",
+        onConfirm: closeDialog,
+      });
       return;
     }
 
-    await togglePublishLesson(lesson.id, !lesson.isPublished);
-    await loadLessons();
+    if (lesson.isPublished) {
+      setConfirmDialog({
+        isOpen: true,
+        title: "ซ่อนบทเรียน?",
+        message: `บทเรียน "${lesson.title}" จะถูกซ่อนจากผู้เรียนทันที คุณสามารถเผยแพร่ใหม่ได้ทุกเมื่อ`,
+        variant: "warning",
+        onConfirm: async () => {
+          await togglePublishLesson(lesson.id, false);
+          await loadLessons();
+        },
+      });
+    } else {
+      setConfirmDialog({
+        isOpen: true,
+        title: "เผยแพร่บทเรียน?",
+        message: `บทเรียน "${lesson.title}" จะปรากฏแก่ผู้เรียนทุกคนทันที`,
+        variant: "info",
+        onConfirm: async () => {
+          await togglePublishLesson(lesson.id, true);
+          await loadLessons();
+        },
+      });
+    }
   };
 
-  const handleDelete = async (lesson: Lesson) => {
-    const confirmDelete = window.confirm(
-      `คุณแน่ใจหรือไม่ว่าต้องการลบบทเรียน "${lesson.title}"?\n(ระบบจะใช้ Soft Delete โดยซ่อนบทเรียนจากคลัง แต่ยังคงรักษาประวัติคะแนนของผู้เรียนไว้)`
-    );
-    if (!confirmDelete) return;
-
-    await softDeleteLesson(lesson.id);
-    await loadLessons();
+  const handleDelete = (lesson: Lesson) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: "ยืนยันการลบบทเรียน",
+      message: `ลบบทเรียน "${lesson.title}" หรือไม่? ระบบใช้ Soft Delete — ข้อมูลคะแนนผู้เรียนจะยังถูกเก็บไว้`,
+      variant: "danger",
+      onConfirm: async () => {
+        await softDeleteLesson(lesson.id);
+        await loadLessons();
+      },
+    });
   };
 
   return (
@@ -100,7 +151,8 @@ export default function TeacherDashboard() {
               บทเรียนทั้งหมด
             </div>
             <div className="font-display font-black text-2xl text-indigo-600">
-              {lessons.length} <span className="text-xs font-normal text-slate-400">เรื่อง</span>
+              {lessons.length}{" "}
+              <span className="text-xs font-normal text-slate-400">เรื่อง</span>
             </div>
           </div>
 
@@ -126,7 +178,7 @@ export default function TeacherDashboard() {
         </div>
       </div>
 
-      {/* Lesson List Table / Cards */}
+      {/* Lesson List */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="font-display font-extrabold text-xl text-slate-900 flex items-center gap-2">
@@ -144,7 +196,9 @@ export default function TeacherDashboard() {
           <div className="grid grid-cols-1 gap-4">
             {lessons.map((lesson) => {
               const isDeleted = lesson.deletedAt !== null;
-              const quizCount = lesson.cards.filter((c) => c.type === "quiz").length;
+              const quizCount = lesson.cards.filter(
+                (c) => c.type === "quiz"
+              ).length;
 
               return (
                 <div
@@ -204,47 +258,83 @@ export default function TeacherDashboard() {
                     </div>
                   </div>
 
-                  {/* Right: Actions */}
-                  <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-                    {!isDeleted && (
-                      <>
-                        <button
-                          onClick={() => handleTogglePublish(lesson)}
-                          className={`btn-3d px-3.5 py-2 text-xs font-bold ${
-                            lesson.isPublished
-                              ? "btn-3d-white text-slate-700"
-                              : "btn-3d-mint text-white"
-                          }`}
-                        >
-                          {lesson.isPublished ? "ซ่อนบทเรียน" : "เผยแพร่ทันที 🚀"}
-                        </button>
+                  {/* Right: HeadlessUI Menu Dropdown */}
+                  {!isDeleted && (
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                      {/* Preview button — always visible */}
+                      <Link
+                        href={`/lesson/${lesson.id}`}
+                        className="btn-3d btn-3d-white p-2 text-slate-600"
+                        title="ดูตัวอย่างแบบผู้เรียน"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Link>
 
-                        <Link
-                          href={`/teacher/lesson/${lesson.id}/edit`}
-                          className="btn-3d btn-3d-white px-3.5 py-2 text-xs font-bold flex items-center gap-1.5 text-indigo-700"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                          <span>แก้ไข</span>
-                        </Link>
+                      {/* Action dropdown — HeadlessUI Menu */}
+                      <div className="relative">
+                        <Menu>
+                          <MenuButton className="btn-3d btn-3d-white px-3.5 py-2 text-xs font-bold flex items-center gap-1.5 text-slate-700">
+                            <Settings className="w-3.5 h-3.5" />
+                            <span>จัดการ</span>
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </MenuButton>
 
-                        <Link
-                          href={`/lesson/${lesson.id}`}
-                          className="btn-3d btn-3d-white px-3 py-2 text-xs font-bold text-slate-600"
-                          title="ดูตัวอย่างแบบผู้เรียน"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </Link>
+                          <MenuItems
+                            anchor="bottom end"
+                            className="z-20 mt-2 w-52 card-chibi p-1.5 shadow-xl border border-slate-200/80 focus:outline-none"
+                          >
+                            {/* Edit */}
+                            <MenuItem>
+                              <Link
+                                href={`/teacher/lesson/${lesson.id}/edit`}
+                                className="group flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-semibold text-indigo-700 data-[focus]:bg-indigo-50 transition-colors"
+                              >
+                                <Edit className="w-4 h-4" />
+                                แก้ไขบทเรียน
+                              </Link>
+                            </MenuItem>
 
-                        <button
-                          onClick={() => handleDelete(lesson)}
-                          className="p-2 text-slate-400 hover:text-rose-600 rounded-xl hover:bg-rose-50 transition-colors"
-                          title="ลบบทเรียน (Soft Delete)"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </>
-                    )}
-                  </div>
+                            {/* Toggle Publish */}
+                            <MenuItem>
+                              <button
+                                onClick={() => handleTogglePublish(lesson)}
+                                className="group flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-semibold data-[focus]:bg-sky-50 transition-colors text-left"
+                              >
+                                {lesson.isPublished ? (
+                                  <>
+                                    <Lock className="w-4 h-4 text-amber-500" />
+                                    <span className="text-amber-700">
+                                      ซ่อนบทเรียน
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Globe className="w-4 h-4 text-emerald-500" />
+                                    <span className="text-emerald-700">
+                                      เผยแพร่ทันที 🚀
+                                    </span>
+                                  </>
+                                )}
+                              </button>
+                            </MenuItem>
+
+                            <div className="h-px bg-slate-100 my-1" />
+
+                            {/* Delete */}
+                            <MenuItem>
+                              <button
+                                onClick={() => handleDelete(lesson)}
+                                className="group flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-semibold text-rose-600 data-[focus]:bg-rose-50 transition-colors text-left"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                ลบบทเรียน
+                              </button>
+                            </MenuItem>
+                          </MenuItems>
+                        </Menu>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -268,6 +358,23 @@ export default function TeacherDashboard() {
           </div>
         )}
       </div>
+
+      {/* HeadlessUI Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        variant={confirmDialog.variant}
+        confirmLabel={
+          confirmDialog.variant === "danger"
+            ? "ลบเลย"
+            : confirmDialog.variant === "warning"
+            ? "เข้าใจแล้ว"
+            : "เผยแพร่เลย 🚀"
+        }
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={closeDialog}
+      />
     </div>
   );
 }
