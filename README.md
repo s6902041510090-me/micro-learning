@@ -1,9 +1,3 @@
-#Micro Learning Platform
-
-Domain glossary. No implementation details. Updated as terms are resolved.
-
----
-
 ## Roles
 
 **Guest** — ผู้เยี่ยมชมที่ยังไม่ได้ล็อกอิน สามารถดูรายการ Lesson และ metadata (ชื่อ, thumbnail, คำอธิบาย) ได้ แต่ไม่สามารถเริ่มเรียนได้
