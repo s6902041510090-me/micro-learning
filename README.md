@@ -1,4 +1,4 @@
-# CONTEXT.md — Micro Learning Platform
+#Micro Learning Platform
 
 Domain glossary. No implementation details. Updated as terms are resolved.
 
