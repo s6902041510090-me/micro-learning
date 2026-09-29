@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isTeacher() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "teacher";
+    }
+
+    // 1. Users collection
+    // Read: own profile or teacher profile
+    // Create: own document, role must be valid ("student" | "teacher")
+    // Update: own document, cannot self-escalate role
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.role in ["student", "teacher"];
+      allow update: if isOwner(userId) && request.resource.data.role == resource.data.role;
+    }
+
+    // 2. Lessons collection
+    // Read: Published & non-deleted lessons are public; Teacher can read own draft/unpublished lessons
+    // Create: Must be authenticated teacher
+    // Update/Delete: Must be the original author
+    match /lessons/{lessonId} {
+      allow read: if (resource.data.isPublished == true && resource.data.deletedAt == null)
+                  || (isAuthenticated() && request.auth.uid == resource.data.authorId);
+      allow create: if isTeacher()
+                    && request.resource.data.authorId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && request.auth.uid == resource.data.authorId;
+    }
+
+    // 3. Progress subcollection: /progress/{userId}/lessons/{lessonId}
+    // Read/Write: Strictly limited to the student owner (Decision Q15/Q8)
+    match /progress/{userId}/lessons/{lessonId} {
+      allow read, write: if isOwner(userId);
+    }
+  }
+}
