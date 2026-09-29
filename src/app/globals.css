@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  --font-display: 'Playpen Sans', cursive, sans-serif;
+  --font-display: 'Playpen Sans Thai', 'Playpen Sans', cursive, sans-serif;
   --font-body: 'Sarabun', -apple-system, BlinkMacSystemFont, sans-serif;
 
   /* Cute Pixar / Chibi Soft Pastel Palette */
